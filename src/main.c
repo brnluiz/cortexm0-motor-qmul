@@ -22,6 +22,7 @@
 #include "Settings.h"
 #include "StepperMotor.h"
 #include "Leds.h"
+#include "MotorMode.h"
 
 OS_TID t_mode_evt_mngr;
 OS_TID t_tasks[TOTAL_TASKS]; /*  task ids */
@@ -122,34 +123,14 @@ __task void modeBtnEventManagerTask(void) {
 	}
 }
 
-MotorSteps nextMode(MotorSteps mode) {
-	if (mode == MOTOR_STEPS_1) {
-		mode = MOTOR_STEPS_2;
-	} else if (mode == MOTOR_STEPS_2) {
-		mode = MOTOR_STEPS_3;
-	} else if (mode == MOTOR_STEPS_3) {
-		mode = MOTOR_STEPS_4;
-	} else if (mode == MOTOR_STEPS_4) {
-		mode = MOTOR_STEPS_5;
-	} else if (mode == MOTOR_STEPS_5) {
-		mode = MOTOR_STEPS_6;
-	} else if (mode == MOTOR_STEPS_6) {
-		mode = MOTOR_STEPS_7;
-	} else if (mode == MOTOR_STEPS_7) {
-		mode = MOTOR_STEPS_8;
-	} else if (mode == MOTOR_STEPS_8) {
-		mode = MOTOR_STEPS_1;
-	}
-	
-	return mode;
-}
-
 __task void controlMotorTask(void) {
 	FSTControlStates state = ST_CONTROL_START;
 	bool motorRunning;
-	MotorSteps modeSteps = MOTOR_STEPS_1;
+
+	MotorMode motorMode;	
+	motorMode = mode_construct();
 	
-	while(1) {		
+	while(1) {
 		updateMotor(m1) ;
 		motorRunning = isMoving(m1) ;
 		
@@ -158,7 +139,7 @@ __task void controlMotorTask(void) {
 				os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF); 
 
 				// Clockwise movement
-				moveSteps(m1, modeSteps, true) ;
+				moveSteps(m1, motorMode.steps, motorMode.rotation) ;
 				state = ST_CONTROL_GO;
 				break ;
 			case ST_CONTROL_GO:
@@ -166,14 +147,14 @@ __task void controlMotorTask(void) {
 				if(!motorRunning) {
 					stopMotor(m1);
 					// Anti-clockwise movement
-					moveSteps(m1, modeSteps, false) ;
+					moveSteps(m1, motorMode.steps, !motorMode.rotation) ;
 					state = ST_CONTROL_RETURN;
 				}
 				break;
 			case ST_CONTROL_RETURN:
 				os_dly_wait(MOTOR_SPEED);
 				if(!motorRunning) {
-					modeSteps = nextMode(modeSteps);
+					motorMode.next(&motorMode);
 					state = ST_CONTROL_START;
 				}
 				break;
