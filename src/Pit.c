@@ -50,36 +50,3 @@ void stopTimer(int channel) {
 void setTimer(int channel, uint32_t timeout) {
 	PIT->CHANNEL[channel].LDVAL = timeout ;
 }
-
-/* -------------------------------------
-    Timer interrupt handler
-
-    Check each channel to see if caused interrupt
-    Write 1 to TIF to reset interrupt flag
-   ------------------------------------- */
-void PIT_IRQHandler(void) {
-	// clear pending interrupts
-	NVIC_ClearPendingIRQ(PIT_IRQn);
-
-	if (PIT->CHANNEL[0].TFLG & PIT_TFLG_TIF_MASK) {
-		// clear TIF
-		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK ;
-		
-		// add code here for channel 0 interrupt
-		// -- start of demo code
-		// Toggle the tone pos
-		PTA->PTOR = MASK(TONE_POS) ;
-		// -- end of demo code
-	}
-
-	if (PIT->CHANNEL[1].TFLG & PIT_TFLG_TIF_MASK) {
-		// clear TIF
-		PIT->CHANNEL[1].TFLG = PIT_TFLG_TIF_MASK ;
-
-		// add code here for channel 1 interrupt
-		// -- start of demo code
-		// Toggle the green LED
-		PTB->PTOR = MASK(GREEN_LED_POS) ;
-		// -- end of demo code
-	}
-}

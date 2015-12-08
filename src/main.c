@@ -23,6 +23,7 @@
 #include "StepperMotor.h"
 #include "Leds.h"
 #include "MotorMode.h"
+#include "Pit.h"
 
 OS_TID t_mode_evt_mngr;
 OS_TID t_tasks[TOTAL_TASKS]; /*  task ids */
@@ -42,6 +43,15 @@ void setupMotor() {
 	
 	// Initialise motor data and set to state 1
   initMotor(m1) ; // motor initially stopped, with step 1 powered
+}
+
+void initTimers() {
+	configurePIT(0) ;
+
+	//setTimer(1, 24000000) ;  // timer 1 every 1 sec
+	setTimer(0, 2400000) ;  // 100ms
+
+	startTimer(0) ;
 }
 
 void initInputButton(void) {
@@ -70,7 +80,23 @@ void PORTD_IRQHandler(void) {
 	// Ok to clear all since this handler is for all of Port D
 }
 
+/* -------------------------------------
+    Timer interrupt handler
 
+    Check each channel to see if caused interrupt
+    Write 1 to TIF to reset interrupt flag
+   ------------------------------------- */
+void PIT_IRQHandler(void) {
+	// clear pending interrupts
+	NVIC_ClearPendingIRQ(PIT_IRQn);
+
+	if (PIT->CHANNEL[0].TFLG & PIT_TFLG_TIF_MASK) {
+		// clear TIF
+		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK ;
+		
+		updateMotor(m1);
+	}
+}
 
 // Task to feedback user click with LEDs
 __task void ledFeedbackTask(void) {
@@ -125,35 +151,39 @@ __task void modeBtnEventManagerTask(void) {
 
 __task void controlMotorTask(void) {
 	FSTControlStates state = ST_CONTROL_START;
-	bool motorRunning;
 
 	MotorMode motorMode;	
-	motorMode = mode_construct();
+	motorMode = mode_construct();	
 	
-	while(1) {
-		updateMotor(m1) ;
-		motorRunning = isMoving(m1) ;
-		
+	while(1) {		
 		switch (state) {
 			case ST_CONTROL_START:
 				os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF); 
-
+			
 				// Clockwise movement
 				moveSteps(m1, motorMode.steps, motorMode.rotation) ;
-				state = ST_CONTROL_GO;
+
+				// Configure the timer and start it
+				stopTimer(0);
+				setTimer(0, motorMode.speed);
+				startTimer(0);
+				
+				state = ST_CONTROL_GO;			
 				break ;
+			
 			case ST_CONTROL_GO:
-				os_dly_wait(MOTOR_SPEED); 
-				if(!motorRunning) {
+				if(!isMoving(m1)) {
+					// Stop the motor
 					stopMotor(m1);
 					// Anti-clockwise movement
 					moveSteps(m1, motorMode.steps, !motorMode.rotation) ;
+					
 					state = ST_CONTROL_RETURN;
 				}
 				break;
+			
 			case ST_CONTROL_RETURN:
-				os_dly_wait(MOTOR_SPEED);
-				if(!motorRunning) {
+				if(!isMoving(m1)) {
 					motorMode.next(&motorMode);
 					state = ST_CONTROL_START;
 				}
@@ -177,6 +207,7 @@ int main (void) {
 	// Initialize input and outputs
 	initOutputLeds();
 	initInputButton();
+	initTimers() ;
 	setupMotor();
 	
 	// Initialize RTX and start init
