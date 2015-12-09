@@ -10,8 +10,9 @@
 #define GREEN_LED_POS (19)	// on port B
 #define BLUE_LED_POS (1)		// on port D
 
-// Button is on port D, pin 6
-#define BUTTON_POS (6)
+// ButtonS are on port D
+#define BUTTON_POS  (6)
+#define BUTTON2_POS (7)
 
 // LED states
 #define LED_ON (1)

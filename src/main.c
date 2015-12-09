@@ -25,11 +25,16 @@
 #include "MotorMode.h"
 #include "Pit.h"
 
+#include "stdlib.h"
+
 OS_TID t_mode_evt_mngr;
+OS_TID t_reset_evt_mngr;
 OS_TID t_tasks[TOTAL_TASKS]; /*  task ids */
 
 motorType mcb ;   // motor control block
 MotorId m1 ;      // motor id
+MotorMode motorMode;
+
 void setupMotor() {
 	m1 = & mcb ;
 	m1->port = PTE ;
@@ -43,12 +48,13 @@ void setupMotor() {
 	
 	// Initialise motor data and set to state 1
   initMotor(m1) ; // motor initially stopped, with step 1 powered
+	
+	motorMode = mode_construct();	
 }
 
 void initTimers() {
 	configurePIT(0) ;
 
-	//setTimer(1, 24000000) ;  // timer 1 every 1 sec
 	setTimer(0, 2400000) ;  // 100ms
 
 	startTimer(0) ;
@@ -60,9 +66,11 @@ void initInputButton(void) {
 	/* Select GPIO and enable pull-up resistors and interrupts 
 		on falling edges for pins connected to switches */
 	PORTD->PCR[BUTTON_POS] |= PORT_PCR_MUX(1) | PORT_PCR_PS_MASK | PORT_PCR_PE_MASK | PORT_PCR_IRQC(0x0a);
+	PORTD->PCR[BUTTON2_POS] |= PORT_PCR_MUX(1) | PORT_PCR_PS_MASK | PORT_PCR_PE_MASK | PORT_PCR_IRQC(0x0a);
 		
 	/* Set port D switch bit to inputs */
 	PTD->PDDR &= ~MASK(BUTTON_POS);
+	PTD->PDDR &= ~MASK(BUTTON2_POS);
 
 	/* Enable Interrupts */
 	NVIC_SetPriority(PORTD_IRQn, 128); // 0, 64, 128 or 192
@@ -75,9 +83,19 @@ void PORTD_IRQHandler(void) {
 	if ((PORTD->ISFR & MASK(BUTTON_POS))) {
 		isr_evt_set (MODE_BTN_PRESSED, t_mode_evt_mngr);
 	}
+	if ((PORTD->ISFR & MASK(BUTTON2_POS))) {
+		isr_evt_set (RESET_BTN_PRESSED, t_reset_evt_mngr);
+	}
+
 	// Clear status flags 
 	PORTD->ISFR = 0xffffffff; 
 	// Ok to clear all since this handler is for all of Port D
+}
+
+void clearEvents(OS_TID tid) {
+	os_evt_clr (MODE_BTN_PRESSED, tid);
+	os_evt_clr (RESET_BTN_PRESSED, tid);
+	os_evt_clr (RESET_DONE, tid);
 }
 
 /* -------------------------------------
@@ -122,18 +140,17 @@ __task void ledFeedbackTask(void) {
 		}
 		
 		// Discard pending notifications
-		os_evt_clr (MODE_BTN_PRESSED, t_tasks[T_LEDS]);
+		clearEvents(t_tasks[T_LEDS]);
 	}
 }
 
 // Button Event Manager Task
 __task void modeBtnEventManagerTask(void) {
 	int i = 0;
-	int buttonPressed;
 
 	while(1) {
 		// Wait until button is pressed
-		buttonPressed = os_evt_wait_and (MODE_BTN_PRESSED, 0xffff);
+		os_evt_wait_and (MODE_BTN_PRESSED, 0xffff);
 		
 		// Propagate the event through all listeners
 		for(i=0; i<TOTAL_TASKS;i++) {
@@ -145,17 +162,40 @@ __task void modeBtnEventManagerTask(void) {
 		os_dly_wait(DEBOUNCE_TIMEOUT);
 		
 		// Discard pending notifications
-		os_evt_clr (MODE_BTN_PRESSED, t_mode_evt_mngr);
+		clearEvents(t_mode_evt_mngr);
+	}
+}
+
+// Button 2 Event Manager Task
+__task void resetBtnEventManagerTask(void) {
+	int i = 0;
+
+	while(1) {
+		// Wait until button is pressed
+		os_evt_wait_and (RESET_BTN_PRESSED, 0xffff);
+		
+		// Propagate the event through all listeners
+		for(i=0; i<TOTAL_TASKS;i++) {
+			// TODO: Check if it is 0... If is not, then send the event
+			os_evt_set (RESET_BTN_PRESSED, t_tasks[i]);
+		}
+		
+		// Wait some time to debounce the buton
+		os_dly_wait(DEBOUNCE_TIMEOUT);
+		
+		// Discard pending notifications
+		clearEvents(t_reset_evt_mngr);
 	}
 }
 
 __task void controlMotorTask(void) {
-	FSTControlStates state = ST_CONTROL_START;
-
-	MotorMode motorMode;	
-	motorMode = mode_construct();	
+	FSMControlStates state = ST_CONTROL_START;
 	
 	while(1) {		
+		if(os_evt_wait_and (RESET_BTN_PRESSED, 1) == OS_R_EVT) {
+			state = ST_CONTROL_RESETWAIT;
+		}
+		
 		switch (state) {
 			case ST_CONTROL_START:
 				os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF); 
@@ -173,13 +213,21 @@ __task void controlMotorTask(void) {
 			
 			case ST_CONTROL_GO:
 				if(!isMoving(m1)) {
+					int returnSteps = motorMode.steps % STEPS;
+					
 					// Stop the motor
 					stopMotor(m1);
+					
 					// Anti-clockwise movement
-					moveSteps(m1, motorMode.steps, !motorMode.rotation) ;
+					moveSteps(m1, returnSteps, !motorMode.rotation) ;
 					
 					state = ST_CONTROL_RETURN;
 				}
+				break;
+
+			case ST_CONTROL_RESETWAIT:
+				os_evt_wait_and (RESET_DONE, 0xFFFF); 
+				state = ST_CONTROL_RETURN;
 				break;
 			
 			case ST_CONTROL_RETURN:
@@ -190,15 +238,54 @@ __task void controlMotorTask(void) {
 				break;
 		}
 		
-		os_evt_clr (MODE_BTN_PRESSED, t_tasks[T_CONTROL_MOTOR]);
+		clearEvents(t_tasks[T_CONTROL_MOTOR]);
+	}
+}
+
+__task void resetMotorTask(void) {
+	FSMResetStates state = ST_RESET_START;
+	bool stop = false;
+	while(1) {
+		switch(state) {
+			case ST_RESET_START:
+				os_evt_wait_and (RESET_BTN_PRESSED, 0xFFFF); 
+			
+				if(!isMoving(m1) && stop) {
+					// Anti-clockwise movement
+					int32_t returnSteps = abs(getSteps(m1)) % 48;
+					moveSteps(m1, returnSteps, !motorMode.rotation);
+					
+					state = ST_RESET_RETURN;
+				}
+				else if(isMoving(m1) && !stop) {
+					state = ST_RESET_STOP;
+				}
+				break;
+			case ST_RESET_STOP:
+				// Stop the motor
+				stopMotor(m1);
+				stop = true;
+				state = ST_RESET_START;
+				break;
+			case ST_RESET_RETURN:
+				if(!isMoving(m1)) {
+					os_evt_set (RESET_DONE, t_tasks[T_CONTROL_MOTOR]);
+					state = ST_RESET_START;
+					stop = false;
+				}
+				break;
+		}
+		clearEvents(t_tasks[T_CONTROL_MOTOR]);
 	}
 }
 
 __task void boot (void) {
-  t_mode_evt_mngr = os_tsk_create (modeBtnEventManagerTask, 0);   // start button task
+  t_mode_evt_mngr  = os_tsk_create (modeBtnEventManagerTask, 0);
+	t_reset_evt_mngr = os_tsk_create (resetBtnEventManagerTask, 0);
 	
-	t_tasks[T_LEDS]          = os_tsk_create (ledFeedbackTask, 0);          // start led task (only user feedback)
-	t_tasks[T_CONTROL_MOTOR] = os_tsk_create (controlMotorTask, 0);        // start tone task (generate the tone)
+	t_tasks[T_LEDS]          = os_tsk_create (ledFeedbackTask, 0);
+	t_tasks[T_CONTROL_MOTOR] = os_tsk_create (controlMotorTask, 0);
+	t_tasks[T_RESET_MOTOR]   = os_tsk_create (resetMotorTask, 0);
 	
 	os_tsk_delete_self ();
 }

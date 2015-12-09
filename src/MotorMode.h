@@ -1,7 +1,8 @@
 #ifndef MOTOR_MODES
 #define MOTOR_MODES
 
-#define STEPS 48
+#include "Settings.h"
+
 typedef enum {
 	MOTOR_STEPS_1 = (STEPS    + STEPS/3),
 	MOTOR_STEPS_2 = (5*STEPS  + 2*STEPS/3),
@@ -25,8 +26,8 @@ typedef enum {
 } MotorState;
 
 typedef enum {
-	MOTOR_CLCK,
 	MOTOR_ANTICLCK,
+	MOTOR_CLCK,
 } MotorRotation;
 
 typedef enum {
@@ -39,9 +40,6 @@ typedef enum {
 	MOTOR_TIME_7 = 10,
 	MOTOR_TIME_8 = 10,
 } MotorTime;
-
-#define PIT_SEC 24000000
-#define SPEED_CALC(sec, steps) (float)((float)sec/(float)steps) * PIT_SEC
 
 typedef struct MotorMode MotorMode;
 

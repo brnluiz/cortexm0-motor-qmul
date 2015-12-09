@@ -466,6 +466,26 @@
               <FileType>5</FileType>
               <FilePath>.\src\StepperMotor.h</FilePath>
             </File>
+            <File>
+              <FileName>MotorMode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\MotorMode.c</FilePath>
+            </File>
+            <File>
+              <FileName>MotorMode.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\src\MotorMode.h</FilePath>
+            </File>
+            <File>
+              <FileName>Pit.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\src\Pit.h</FilePath>
+            </File>
+            <File>
+              <FileName>Pit.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\Pit.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -939,6 +959,26 @@
               <FileName>StepperMotor.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\src\StepperMotor.h</FilePath>
+            </File>
+            <File>
+              <FileName>MotorMode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\MotorMode.c</FilePath>
+            </File>
+            <File>
+              <FileName>MotorMode.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\src\MotorMode.h</FilePath>
+            </File>
+            <File>
+              <FileName>Pit.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\src\Pit.h</FilePath>
+            </File>
+            <File>
+              <FileName>Pit.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\Pit.c</FilePath>
             </File>
           </Files>
         </Group>
