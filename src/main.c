@@ -201,6 +201,7 @@ __task void controlMotorTask(void) {
 				os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF); 
 			
 				// Clockwise movement
+				stopMotor(m1);
 				moveSteps(m1, motorMode.steps, motorMode.rotation) ;
 
 				// Configure the timer and start it
@@ -215,10 +216,8 @@ __task void controlMotorTask(void) {
 				if(!isMoving(m1)) {
 					int returnSteps = motorMode.steps % STEPS;
 					
-					// Stop the motor
-					stopMotor(m1);
-					
 					// Anti-clockwise movement
+					stopMotor(m1);
 					moveSteps(m1, returnSteps, !motorMode.rotation) ;
 					
 					state = ST_CONTROL_RETURN;
@@ -251,9 +250,13 @@ __task void resetMotorTask(void) {
 				os_evt_wait_and (RESET_BTN_PRESSED, 0xFFFF); 
 			
 				if(!isMoving(m1) && stop) {
+					
 					// Anti-clockwise movement
 					int32_t returnSteps = abs(getSteps(m1)) % 48;
-					moveSteps(m1, returnSteps, !motorMode.rotation);
+					stopMotor(m1);
+					if(returnSteps > 0) {
+						moveSteps(m1, returnSteps, !motorMode.rotation);
+					}
 					
 					state = ST_RESET_RETURN;
 				}
@@ -261,12 +264,19 @@ __task void resetMotorTask(void) {
 					state = ST_RESET_STOP;
 				}
 				break;
+				
 			case ST_RESET_STOP:
 				// Stop the motor
-				stopMotor(m1);
-				stop = true;
-				state = ST_RESET_START;
+				while(isMoving(m1)) {
+					stopMotor(m1);
+				}
+				
+				if(!isMoving(m1)) {
+					stop = true;
+					state = ST_RESET_START;
+				}
 				break;
+			
 			case ST_RESET_RETURN:
 				if(!isMoving(m1)) {
 					os_evt_set (RESET_DONE, t_tasks[T_CONTROL_MOTOR]);
@@ -275,7 +285,7 @@ __task void resetMotorTask(void) {
 				}
 				break;
 		}
-		clearEvents(t_tasks[T_CONTROL_MOTOR]);
+		clearEvents(t_tasks[T_RESET_MOTOR]);
 	}
 }
 

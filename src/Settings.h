@@ -15,8 +15,8 @@ enum {
 };
 
 // Timeout configurations
-#define LED_TIMEOUT      30000 // 3000ms
-#define DEBOUNCE_TIMEOUT 3000  // 200ms
+#define LED_TIMEOUT      3000 // 3000ms
+#define DEBOUNCE_TIMEOUT 200  // 200ms
 
 // Definitions (ENUMS and DEFINES)
 #define TOTAL_EVENTS 1
