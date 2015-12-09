@@ -250,12 +250,22 @@ __task void resetMotorTask(void) {
 				os_evt_wait_and (RESET_BTN_PRESSED, 0xFFFF); 
 			
 				if(!isMoving(m1) && stop) {
-					
-					// Anti-clockwise movement
-					int32_t returnSteps = abs(getSteps(m1)) % 48;
+					bool rotation = !motorMode.rotation;
+					int32_t returnSteps;
 					stopMotor(m1);
+					
+					// Calculate the number of necessary steps
+					returnSteps = abs(getSteps(m1)) % 48;
+					
+					// Check if there is a faster way to return
+					if (returnSteps > 24) {
+						returnSteps = 48 - returnSteps;
+						rotation = !rotation;
+					}
+					
+					// Anti-clockwise movement (if there returnSteps > 0)
 					if(returnSteps > 0) {
-						moveSteps(m1, returnSteps, !motorMode.rotation);
+						moveSteps(m1, returnSteps, rotation);
 					}
 					
 					state = ST_RESET_RETURN;
