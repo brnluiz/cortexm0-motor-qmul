@@ -24,6 +24,7 @@ typedef enum {
 	MODE_BTN_PRESSED = 1,
 	RESET_BTN_PRESSED,
 	RESET_DONE,
+	RETURN_ENABLED
 } Events;
 
 

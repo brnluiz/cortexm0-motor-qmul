@@ -250,6 +250,7 @@ __task void controlMotorTask(void) {
 			case ST_CONTROL_GO:
 				// If it already finished the movement
 				if(!isMoving(m1)) {
+					os_evt_wait_and (RETURN_ENABLED, 0xFFFF); 
 					setupMotorReturn();
 					state = ST_CONTROL_RETURN;
 				}
@@ -291,6 +292,11 @@ __task void resetMotorTask(void) {
 				// If it is moving and reset button was pressed, stop the motor
 				else if(isMoving(m1) && !stop) {
 					state = ST_RESET_STOP;
+				}
+				// Motor waiting to return
+				else if(!isMoving(m1) && !stop) {
+					os_evt_set (RETURN_ENABLED, t_tasks[T_CONTROL_MOTOR]);
+					stop = false;
 				}
 				break;
 				
