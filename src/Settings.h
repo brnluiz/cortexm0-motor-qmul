@@ -30,6 +30,7 @@ typedef enum {
 #define STEPS 48
 #define STEPS_HALF 24
 #define PIT_SEC 24000000
+#define FAST_RETURN_TIME .5
 #define SPEED_CALC(sec, steps) (float)((float)sec/(float)steps) * PIT_SEC
 
 typedef enum {

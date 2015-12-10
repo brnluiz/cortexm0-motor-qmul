@@ -93,6 +93,12 @@ void PORTD_IRQHandler(void) {
 	PORTD->ISFR = 0xffffffff; 
 }
 
+void setupTimer(int speed) {
+	stopTimer(0);
+	setTimer(0, speed);
+	startTimer(0);
+}
+
 // Clear all possible events associated with some TID
 void clearEvents(OS_TID tid) {
 	os_evt_clr (MODE_BTN_PRESSED, tid);
@@ -205,9 +211,7 @@ __task void controlMotorTask(void) {
 				moveSteps(m1, motorMode.steps, motorMode.rotation) ;
 
 				// Configure the timer (move the motor on the right speed) and start it
-				stopTimer(0);
-				setTimer(0, motorMode.speed);
-				startTimer(0);
+				setupTimer(motorMode.speed);
 				
 				state = ST_CONTROL_GO;			
 				break ;
@@ -223,9 +227,7 @@ __task void controlMotorTask(void) {
 					moveSteps(m1, returnSteps, !motorMode.rotation) ;
 					
 					// Configure the timer (move the motor on the right speed) and start it
-					stopTimer(0);
-					setTimer(0, (float)((float).2/(float)returnSteps) * PIT_SEC);
-					startTimer(0);
+					setupTimer((float)((float)FAST_RETURN_TIME/(float)returnSteps) * PIT_SEC);
 					
 					state = ST_CONTROL_RETURN;
 				}
@@ -304,6 +306,9 @@ __task void resetMotorTask(void) {
 					returnSteps = STEPS - returnSteps;
 					rotation = !rotation;
 				}
+				
+				// Configure the timer (move the motor on the right speed) and start it
+				setupTimer((float)((float)FAST_RETURN_TIME/(float)returnSteps) * PIT_SEC);
 				
 				// If there returnSteps > 0, setup the return movement, else don't do nothing
 				if(returnSteps > 0) {
