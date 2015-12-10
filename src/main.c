@@ -213,7 +213,9 @@ __task void controlMotorTask(void) {
 				break ;
 			
 			case ST_CONTROL_GO:
+				// If ti already finished the movement
 				if(!isMoving(m1)) {
+					// Get how many steps is needed to return
 					int returnSteps = motorMode.steps % STEPS;
 					
 					// Anti-clockwise movement
@@ -244,31 +246,16 @@ __task void controlMotorTask(void) {
 __task void resetMotorTask(void) {
 	FSMResetStates state = ST_RESET_START;
 	bool stop = false;
+	bool rotation;
+	int32_t returnSteps;
+	
 	while(1) {
 		switch(state) {
 			case ST_RESET_START:
 				os_evt_wait_and (RESET_BTN_PRESSED, 0xFFFF); 
 			
 				if(!isMoving(m1) && stop) {
-					bool rotation = !motorMode.rotation;
-					int32_t returnSteps;
-					stopMotor(m1);
-					
-					// Calculate the number of necessary steps
-					returnSteps = abs(getSteps(m1)) % 48;
-					
-					// Check if there is a faster way to return
-					if (returnSteps > 24) {
-						returnSteps = 48 - returnSteps;
-						rotation = !rotation;
-					}
-					
-					// Anti-clockwise movement (if there returnSteps > 0)
-					if(returnSteps > 0) {
-						moveSteps(m1, returnSteps, rotation);
-					}
-					
-					state = ST_RESET_RETURN;
+					state = ST_RESET_SETUPRETURN;
 				}
 				else if(isMoving(m1) && !stop) {
 					state = ST_RESET_STOP;
@@ -276,7 +263,7 @@ __task void resetMotorTask(void) {
 				break;
 				
 			case ST_RESET_STOP:
-				// Stop the motor
+				// Stop the motor at all costs
 				while(isMoving(m1)) {
 					stopMotor(m1);
 				}
@@ -285,6 +272,39 @@ __task void resetMotorTask(void) {
 					stop = true;
 					state = ST_RESET_START;
 				}
+				break;
+
+			case ST_RESET_SETUPRETURN:
+				while(isMoving(m1)) {
+					stopMotor(m1);
+				}
+				
+				// Calculate the number of necessary steps
+				returnSteps = abs(getSteps(m1));
+				returnSteps = returnSteps % 48;
+				
+				if (motorMode.state == MOTOR_3 || motorMode.state == MOTOR_4 || motorMode.state == MOTOR_5) {
+					returnSteps = getSteps(m1);
+					returnSteps = abs(returnSteps);
+					returnSteps = returnSteps % 48;
+				}
+				
+				// Invert the rotation of the motor (to go backwards)
+				rotation = !motorMode.rotation;
+
+				// Check if there is a faster way to return
+				if (returnSteps > STEPS_HALF) {
+					// Invert the return steps and rotation
+					returnSteps = STEPS - returnSteps;
+					rotation = !rotation;
+				}
+				
+				// If there returnSteps > 0, setup the return movement
+				if(returnSteps > 0) {
+					moveSteps(m1, returnSteps, rotation);
+				}
+				
+				state = ST_RESET_RETURN;
 				break;
 			
 			case ST_RESET_RETURN:

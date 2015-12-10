@@ -28,6 +28,7 @@ typedef enum {
 
 
 #define STEPS 48
+#define STEPS_HALF 24
 #define PIT_SEC 24000000
 #define SPEED_CALC(sec, steps) (float)((float)sec/(float)steps) * PIT_SEC
 
@@ -41,6 +42,7 @@ typedef enum {
 typedef enum {
 	ST_RESET_START,
 	ST_RESET_STOP,
+	ST_RESET_SETUPRETURN,
 	ST_RESET_RETURN
 } FSMResetStates;
 

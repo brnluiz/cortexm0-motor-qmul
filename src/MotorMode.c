@@ -10,7 +10,7 @@ void mode_next(MotorMode *self) {
 	else if (self->state == MOTOR_2) {
 		self->state    = MOTOR_3;
 		self->steps    = MOTOR_STEPS_3;
-		self->rotation = MOTOR_CLCK;
+		self->rotation = MOTOR_ANTICLCK;
 		self->speed    = SPEED_CALC(MOTOR_TIME_3, MOTOR_STEPS_3);
 	}
 	else if (self->state == MOTOR_3) {
@@ -51,8 +51,8 @@ void mode_next(MotorMode *self) {
 void mode_reset(MotorMode *self) {
 	self->state    = MOTOR_1;
 	self->steps    = MOTOR_STEPS_1;
-	self->speed    = SPEED_CALC(MOTOR_TIME_1, MOTOR_STEPS_1);
 	self->rotation = MOTOR_CLCK;
+	self->speed    = SPEED_CALC(MOTOR_TIME_1, MOTOR_STEPS_1);
 }
 
 MotorMode mode_construct() {
@@ -60,8 +60,8 @@ MotorMode mode_construct() {
 	
 	mode.state    = MOTOR_1;
 	mode.steps    = MOTOR_STEPS_1;
-	mode.speed    = SPEED_CALC(MOTOR_TIME_1, MOTOR_STEPS_1);
 	mode.rotation = MOTOR_CLCK;
+	mode.speed    = SPEED_CALC(MOTOR_TIME_1, MOTOR_STEPS_1);
 	
 	mode.next = mode_next;
 	mode.reset = mode_reset;
