@@ -63,6 +63,8 @@ MotorMode mode_construct() {
 	mode.rotation = MOTOR_CLCK;
 	mode.speed    = SPEED_CALC(MOTOR_TIME_1, MOTOR_STEPS_1);
 	
+	mode.initStep = 0;
+	
 	mode.next = mode_next;
 	mode.reset = mode_reset;
 	

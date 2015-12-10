@@ -48,6 +48,7 @@ struct MotorMode {
 	MotorState state;
 	MotorSteps steps;
 	MotorRotation rotation;
+	long initStep;
 	
 	void (*next)(MotorMode* self);
 	void (*reset)(MotorMode* self);

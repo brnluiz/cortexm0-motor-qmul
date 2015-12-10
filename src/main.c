@@ -80,38 +80,36 @@ void initInputButton(void) {
 
 void PORTD_IRQHandler(void) {  
 	NVIC_ClearPendingIRQ(PORTD_IRQn);
+	// Send the BUTTON1 event to the mode manager
 	if ((PORTD->ISFR & MASK(BUTTON_POS))) {
 		isr_evt_set (MODE_BTN_PRESSED, t_mode_evt_mngr);
 	}
+	// Send the BUTTON2 event to the reset manager
 	if ((PORTD->ISFR & MASK(BUTTON2_POS))) {
 		isr_evt_set (RESET_BTN_PRESSED, t_reset_evt_mngr);
 	}
 
 	// Clear status flags 
 	PORTD->ISFR = 0xffffffff; 
-	// Ok to clear all since this handler is for all of Port D
 }
 
+// Clear all possible events associated with some TID
 void clearEvents(OS_TID tid) {
 	os_evt_clr (MODE_BTN_PRESSED, tid);
 	os_evt_clr (RESET_BTN_PRESSED, tid);
 	os_evt_clr (RESET_DONE, tid);
 }
 
-/* -------------------------------------
-    Timer interrupt handler
-
-    Check each channel to see if caused interrupt
-    Write 1 to TIF to reset interrupt flag
-   ------------------------------------- */
+// Timer 0 interrupt handler
 void PIT_IRQHandler(void) {
-	// clear pending interrupts
+	// Clear pending interrupts
 	NVIC_ClearPendingIRQ(PIT_IRQn);
 
 	if (PIT->CHANNEL[0].TFLG & PIT_TFLG_TIF_MASK) {
-		// clear TIF
+		// Clear TIF
 		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK ;
 		
+		// Update the motor status (this will make the motor move)
 		updateMotor(m1);
 	}
 }
@@ -122,7 +120,7 @@ __task void ledFeedbackTask(void) {
 	greenLEDOnOff(LED_OFF);
 	
 	while(1) {
-		// Wait for the user click
+		// Wait for the user click on BUTTON1
 		os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF);
 		switch (state) {
 			case COLOR_RED:
@@ -191,7 +189,8 @@ __task void resetBtnEventManagerTask(void) {
 __task void controlMotorTask(void) {
 	FSMControlStates state = ST_CONTROL_START;
 	
-	while(1) {		
+	while(1) {
+		// If the user pressed the BUTTON2, wait until the motor is successful reset
 		if(os_evt_wait_and (RESET_BTN_PRESSED, 1) == OS_R_EVT) {
 			state = ST_CONTROL_RESETWAIT;
 		}
@@ -200,11 +199,12 @@ __task void controlMotorTask(void) {
 			case ST_CONTROL_START:
 				os_evt_wait_and (MODE_BTN_PRESSED, 0xFFFF); 
 			
-				// Clockwise movement
+				// Setup the movement
 				stopMotor(m1);
+				motorMode.initStep = getSteps(m1);
 				moveSteps(m1, motorMode.steps, motorMode.rotation) ;
 
-				// Configure the timer and start it
+				// Configure the timer (move the motor on the right speed) and start it
 				stopTimer(0);
 				setTimer(0, motorMode.speed);
 				startTimer(0);
@@ -213,26 +213,34 @@ __task void controlMotorTask(void) {
 				break ;
 			
 			case ST_CONTROL_GO:
-				// If ti already finished the movement
+				// If it already finished the movement
 				if(!isMoving(m1)) {
 					// Get how many steps is needed to return
-					int returnSteps = motorMode.steps % STEPS;
+					long returnSteps = motorMode.steps % STEPS;
 					
-					// Anti-clockwise movement
+					// Setup the return movement
 					stopMotor(m1);
 					moveSteps(m1, returnSteps, !motorMode.rotation) ;
+					
+					// Configure the timer (move the motor on the right speed) and start it
+					stopTimer(0);
+					setTimer(0, (float)((float).2/(float)returnSteps) * PIT_SEC);
+					startTimer(0);
 					
 					state = ST_CONTROL_RETURN;
 				}
 				break;
 
 			case ST_CONTROL_RESETWAIT:
+				// Wait until the Reset task signal that it already reset the motor
 				os_evt_wait_and (RESET_DONE, 0xFFFF); 
 				state = ST_CONTROL_RETURN;
 				break;
 			
 			case ST_CONTROL_RETURN:
+				// Wait until the motor stop the backward movement
 				if(!isMoving(m1)) {
+					// Setups the next movement
 					motorMode.next(&motorMode);
 					state = ST_CONTROL_START;
 				}
@@ -252,44 +260,42 @@ __task void resetMotorTask(void) {
 	while(1) {
 		switch(state) {
 			case ST_RESET_START:
-				os_evt_wait_and (RESET_BTN_PRESSED, 0xFFFF); 
+				os_evt_wait_and(RESET_BTN_PRESSED, 0xFFFF); 
 			
+				// If it was moving and was stopped by this task
 				if(!isMoving(m1) && stop) {
 					state = ST_RESET_SETUPRETURN;
 				}
+				// If it is moving and reset button was pressed, stop the motor
 				else if(isMoving(m1) && !stop) {
 					state = ST_RESET_STOP;
 				}
 				break;
 				
 			case ST_RESET_STOP:
-				// Stop the motor at all costs
-				while(isMoving(m1)) {
-					stopMotor(m1);
-				}
+				// Stop the motor
+				stopMotor(m1);
 				
 				if(!isMoving(m1)) {
+					// Signal that the motor was stopped (enabling the "reset to initial position")
 					stop = true;
 					state = ST_RESET_START;
 				}
 				break;
 
 			case ST_RESET_SETUPRETURN:
-				while(isMoving(m1)) {
-					stopMotor(m1);
+				// Stop the motor 
+				stopMotor(m1);
+				
+				// Get the number of actual steps (considering the initial step)
+				if(motorMode.rotation == MOTOR_CLCK) {
+					returnSteps = getSteps(m1) - motorMode.initStep;
+				} else {
+					returnSteps = motorMode.initStep - getSteps(m1);
 				}
 				
-				// Calculate the number of necessary steps
-				returnSteps = abs(getSteps(m1));
+				// Get the shortest way to move the motor backwards (inverting the rotation)
 				returnSteps = returnSteps % 48;
-				
-				if (motorMode.state == MOTOR_3 || motorMode.state == MOTOR_4 || motorMode.state == MOTOR_5) {
-					returnSteps = getSteps(m1);
-					returnSteps = abs(returnSteps);
-					returnSteps = returnSteps % 48;
-				}
-				
-				// Invert the rotation of the motor (to go backwards)
 				rotation = !motorMode.rotation;
 
 				// Check if there is a faster way to return
@@ -299,7 +305,7 @@ __task void resetMotorTask(void) {
 					rotation = !rotation;
 				}
 				
-				// If there returnSteps > 0, setup the return movement
+				// If there returnSteps > 0, setup the return movement, else don't do nothing
 				if(returnSteps > 0) {
 					moveSteps(m1, returnSteps, rotation);
 				}
@@ -308,7 +314,9 @@ __task void resetMotorTask(void) {
 				break;
 			
 			case ST_RESET_RETURN:
+				// Wait until the motor stop the backward movement
 				if(!isMoving(m1)) {
+					// Send a signal to the Control task that the reset is done
 					os_evt_set (RESET_DONE, t_tasks[T_CONTROL_MOTOR]);
 					state = ST_RESET_START;
 					stop = false;
