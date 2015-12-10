@@ -99,6 +99,37 @@ void setupTimer(int speed) {
 	startTimer(0);
 }
 
+void setupMotorReturn(void) {
+	int32_t returnSteps;
+	bool    rotation;
+	
+	// Get the number of actual steps (considering the initial step)
+	if(motorMode.rotation == MOTOR_CLCK) {
+		returnSteps = getSteps(m1) - motorMode.initStep;
+	} else {
+		returnSteps = motorMode.initStep - getSteps(m1);
+	}
+	
+	// Get the shortest way to move the motor backwards (inverting the rotation)
+	returnSteps = returnSteps % 48;
+	rotation = !motorMode.rotation;
+
+	// Check if there is a faster way to return
+	if (returnSteps > STEPS_HALF) {
+		// Invert the return steps and rotation
+		returnSteps = STEPS - returnSteps;
+		rotation = !rotation;
+	}
+	
+	// Configure the timer (move the motor on the right speed) and start it
+	setupTimer((float)((float)FAST_RETURN_TIME/(float)returnSteps) * PIT_SEC);
+	
+	// If there returnSteps > 0, setup the return movement, else don't do nothing
+	if(returnSteps > 0) {
+		moveSteps(m1, returnSteps, rotation);
+	}
+}
+
 // Clear all possible events associated with some TID
 void clearEvents(OS_TID tid) {
 	os_evt_clr (MODE_BTN_PRESSED, tid);
@@ -219,16 +250,7 @@ __task void controlMotorTask(void) {
 			case ST_CONTROL_GO:
 				// If it already finished the movement
 				if(!isMoving(m1)) {
-					// Get how many steps is needed to return
-					long returnSteps = motorMode.steps % STEPS;
-					
-					// Setup the return movement
-					stopMotor(m1);
-					moveSteps(m1, returnSteps, !motorMode.rotation) ;
-					
-					// Configure the timer (move the motor on the right speed) and start it
-					setupTimer((float)((float)FAST_RETURN_TIME/(float)returnSteps) * PIT_SEC);
-					
+					setupMotorReturn();
 					state = ST_CONTROL_RETURN;
 				}
 				break;
@@ -256,8 +278,6 @@ __task void controlMotorTask(void) {
 __task void resetMotorTask(void) {
 	FSMResetStates state = ST_RESET_START;
 	bool stop = false;
-	bool rotation;
-	int32_t returnSteps;
 	
 	while(1) {
 		switch(state) {
@@ -286,35 +306,7 @@ __task void resetMotorTask(void) {
 				break;
 
 			case ST_RESET_SETUPRETURN:
-				// Stop the motor 
-				stopMotor(m1);
-				
-				// Get the number of actual steps (considering the initial step)
-				if(motorMode.rotation == MOTOR_CLCK) {
-					returnSteps = getSteps(m1) - motorMode.initStep;
-				} else {
-					returnSteps = motorMode.initStep - getSteps(m1);
-				}
-				
-				// Get the shortest way to move the motor backwards (inverting the rotation)
-				returnSteps = returnSteps % 48;
-				rotation = !motorMode.rotation;
-
-				// Check if there is a faster way to return
-				if (returnSteps > STEPS_HALF) {
-					// Invert the return steps and rotation
-					returnSteps = STEPS - returnSteps;
-					rotation = !rotation;
-				}
-				
-				// Configure the timer (move the motor on the right speed) and start it
-				setupTimer((float)((float)FAST_RETURN_TIME/(float)returnSteps) * PIT_SEC);
-				
-				// If there returnSteps > 0, setup the return movement, else don't do nothing
-				if(returnSteps > 0) {
-					moveSteps(m1, returnSteps, rotation);
-				}
-				
+				setupMotorReturn();
 				state = ST_RESET_RETURN;
 				break;
 			
