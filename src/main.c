@@ -24,6 +24,7 @@
 #include "Leds.h"
 #include "MotorMode.h"
 #include "Pit.h"
+#include "Init.h"
 
 #include "stdlib.h"
 
@@ -31,53 +32,7 @@ OS_TID t_mode_evt_mngr;
 OS_TID t_reset_evt_mngr;
 OS_TID t_tasks[TOTAL_TASKS]; /*  task ids */
 
-motorType mcb ;   // motor control block
-MotorId m1 ;      // motor id
-MotorMode motorMode;
-
-void setupMotor() {
-	m1 = & mcb ;
-	m1->port = PTE ;
-  m1->bitAp = MOTOR_IN1 ;
-  m1->bitAm = MOTOR_IN2 ;
-  m1->bitBp = MOTOR_IN3 ;
-  m1->bitBm = MOTOR_IN4 ;
-
-	// Enable clock to port E
-	SIM->SCGC5 |=  SIM_SCGC5_PORTE_MASK; /* enable clock for port E */
-	
-	// Initialise motor data and set to state 1
-  initMotor(m1) ; // motor initially stopped, with step 1 powered
-	
-	motorMode = mode_construct();	
-}
-
-void initTimers() {
-	configurePIT(0) ;
-
-	setTimer(0, 2400000) ;  // 100ms
-
-	startTimer(0) ;
-}
-
-void initInputButton(void) {
-	SIM->SCGC5 |=  SIM_SCGC5_PORTD_MASK; /* enable clock for port D */
-
-	/* Select GPIO and enable pull-up resistors and interrupts 
-		on falling edges for pins connected to switches */
-	PORTD->PCR[BUTTON_POS] |= PORT_PCR_MUX(1) | PORT_PCR_PS_MASK | PORT_PCR_PE_MASK | PORT_PCR_IRQC(0x0a);
-	PORTD->PCR[BUTTON2_POS] |= PORT_PCR_MUX(1) | PORT_PCR_PS_MASK | PORT_PCR_PE_MASK | PORT_PCR_IRQC(0x0a);
-		
-	/* Set port D switch bit to inputs */
-	PTD->PDDR &= ~MASK(BUTTON_POS);
-	PTD->PDDR &= ~MASK(BUTTON2_POS);
-
-	/* Enable Interrupts */
-	NVIC_SetPriority(PORTD_IRQn, 128); // 0, 64, 128 or 192
-	NVIC_ClearPendingIRQ(PORTD_IRQn);  // clear any pending interrupts
-	NVIC_EnableIRQ(PORTD_IRQn);
-}
-
+// Port D IRQ Handler
 void PORTD_IRQHandler(void) {  
 	NVIC_ClearPendingIRQ(PORTD_IRQn);
 	// Send the BUTTON1 event to the mode manager
@@ -93,12 +48,14 @@ void PORTD_IRQHandler(void) {
 	PORTD->ISFR = 0xffffffff; 
 }
 
+// Helper: setup and starting the timer
 void setupTimer(int speed) {
 	stopTimer(0);
 	setTimer(0, speed);
 	startTimer(0);
 }
 
+// Helper: setup the motor return in the fastest possible way
 void setupMotorReturn(void) {
 	int32_t returnSteps;
 	bool    rotation;
@@ -130,11 +87,12 @@ void setupMotorReturn(void) {
 	}
 }
 
-// Clear all possible events associated with some TID
+// Helper: Clear all possible events associated with some TID
 void clearEvents(OS_TID tid) {
 	os_evt_clr (MODE_BTN_PRESSED, tid);
 	os_evt_clr (RESET_BTN_PRESSED, tid);
 	os_evt_clr (RESET_DONE, tid);
+	os_evt_clr (RETURN_ENABLED, tid);
 }
 
 // Timer 0 interrupt handler
@@ -223,6 +181,7 @@ __task void resetBtnEventManagerTask(void) {
 	}
 }
 
+// Motor Control task, responsible to start the execution of the movement
 __task void controlMotorTask(void) {
 	FSMControlStates state = ST_CONTROL_START;
 	
@@ -276,6 +235,7 @@ __task void controlMotorTask(void) {
 	}
 }
 
+// Reset Motor task, responsible to stop it and reset it to the beginning
 __task void resetMotorTask(void) {
 	FSMResetStates state = ST_RESET_START;
 	bool stop = false;
@@ -330,6 +290,7 @@ __task void resetMotorTask(void) {
 	}
 }
 
+// Init all tasks
 __task void boot (void) {
   t_mode_evt_mngr  = os_tsk_create (modeBtnEventManagerTask, 0);
 	t_reset_evt_mngr = os_tsk_create (resetBtnEventManagerTask, 0);
